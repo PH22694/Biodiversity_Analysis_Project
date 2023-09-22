@@ -1,0 +1,266 @@
+---
+title: 'MA334: Final Project'
+author: '2201687'
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+## Introduction
+
+
+Biodiversity is an important area of study, especially given a documented trend of decline in biodiversity across the UK. This project was conceived with the aim of analysing the biodiversity within the UK. The measures of biodiversity are standardised so differing groups can be compared effectively against each other. Additionally, data has been collected over two differing time periods, referred to as Y70 and Y00 - signifying a period round 1970 and between 2000 and 2013 respectively. This allows for analysis over time, and comparing biodiversity measures between the two periods. 
+Data within this set has been divided into 3 groups: biodiversity 11 (BD11), BD7, and BD4. These refer to the mean biodiversity of all taxonomic groups, a selection of 7 taxonomic groups from the original BD11, and the remaining 4 taxonomic groups left out of BD7 respectively. These will be used for comparisons and to aid in regression analysis regarding biodiversity and changes in it. 
+The chosen 7 taxonomic groups of BD7 are Bees, Bryophytes, Butterflies, Isopods, Macromoths, Grasshoppers and Crickets, and Vascular plants; this leaves Birds, Carabids, Hoverfliers, and Ladybirds in BD4. 
+Key questions this project seeks to answer include how BD7 differs from BD11 and BD4, and how these change over time. 
+
+
+## Exploratory Data Analysis
+
+With the aim of better understanding the data set being used in this project some exploratory data analysis will be conducted with a focus on exploring the chosen 7 as single variables, and exploring correlations between them and other features within the data set. 
+
+```{r, echo=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyr) # for spliting on the period see below
+library(moments) # for calculating moments for skewness etc.
+library(reshape2)
+library(ggplot2)
+library(ggcorrplot)
+par(mfrow=c(1, 1)) 
+
+df <- read.csv("M:\\pc\\desktop\\Stats in R\\proportional_species_richness_V3.csv")
+#Load in the data set being analysed in this project. 
+#This data set has already had some data cleaning done to it, namely the removal of missing values.
+
+#Proj_data = df
+
+names(df)
+str(df)
+df$period <- as.factor(df$period) 
+df$dominantLandClass <- as.factor(df$dominantLandClass)
+
+#My7: Bees, Bryophytes, Butterflies, Isopods, Macromoths, Grasshoppers_._Crickets, Vascular_plants
+#Other4: Bird, Carabids, Hoverfliers, Ladybirds
+
+all <- c(2:12)
+eco_selected <- c(df$Bees, df$Bryophytes, df$Butterflies, df$Isopods, df$Macromoths, df$Grasshoppers_._Crickets, df$Vascular_plants)
+eco_selected <- c(2,4,5,8,10,11,12)
+eco_not_selected <- all[!(all%in%eco_selected)]
+eco_names <- names(df[,2:12])
+eco_selected_names <- names(df)[eco_selected]
+eco_selected_names
+
+# calculate the bio div measure over 7 taxinomic groups
+bd7 <- rowMeans(df[,eco_selected],na.rm=TRUE) # mean the 7 columns 
+# add in the biodiversity measure which is the mean over 7 taxonomic groups
+#Proj_data_MA334 = df_Proj
+df_Proj <- df%>%mutate(eco_status_7=bd7)
+names(df_Proj)
+```
+
+``` {r}
+table <- data.frame()
+for(i in eco_selected){
+  table <- rbind(table,
+                 c(eco_names[i-1],
+                   round(mean(df_Proj[,i],na.rm = TRUE),digits = 2),
+                   round(sd(df_Proj[,i],na.rm = TRUE),digits = 2),
+                   round(skewness(df_Proj[,i],na.rm = TRUE),digits = 2)
+                 ))}
+colnames(table) <- c("taxi_group","mean","sd","skewness")
+table%>%arrange(sd,skewness)
+```
+
+Looking at the species richness of the BD7 individually it can be seen that Butterflies are the most common across all hectads, with a standardised richness of 0.87 with a standard deviation (SD) of 0.14; meanwhile Isopods have the lowest level of richness at 0.55 with an SD of 0.22. Bees have the most variation, with a SD of 0.31, while Vascular plant have the lowest variation with an SD of 0.1. Finally, Macromoths have the most skewed distribution with a skewness of -1.14, while Isopods have the lowest at 0.05. 
+
+``` {r}
+df_means <- aggregate(cbind(Bees, Bryophytes, Butterflies, Isopods, Macromoths, 
+                            Grasshoppers_._Crickets, Vascular_plants) ~ period, data = df, mean)
+df_change <- df_means %>% 
+  gather(key = "variable", value = "value", -period) %>% 
+  group_by(variable) %>% 
+  summarize(percent_change = ((value[period == "Y00"] - value[period == "Y70"]) / value[period == "Y70"]) * 100)
+df_change
+(40.9+0.7+14-9.11-34.8+11.6-7.47)/7
+```
+
+A quick analysis of the individual change in species richness for the the chosen 7 taxonomic groups reveals substantial changes for some and little change for others. For the chosen 7, the groups with the most variations over time are -35% for Isopods, and +41% for Bees across all hectads. This level of change sharply moves towards the mean with a -9.1% change for Grasshoppers and Crickets, and a +14% change for butterlfies. Overall, the mean species richness change for the chosen 7 is +2.26%.
+
+``` {r}
+# now use the eastings and northings (these may be better used as predictors )
+cor(df_Proj$eco_status_7,df_Proj$Easting)
+cor(df_Proj$eco_status_7,df_Proj$Northing)
+# Create a subset of the data with only the columns you want to use
+df_sub <- df_Proj[, c("eco_status_7", "Easting", "Northing")]
+# Calculate the correlation matrix for the subset
+corr_matrix <- cor(df_sub)
+# Create the first ggcorrplot showing correlation between eco_status_7 and Easting/Northing
+ggcorrplot(corr_matrix, hc.order = TRUE, type = "lower", outline.col = "white", lab = TRUE, lab_size = 3, colors = c("#6D9EC1", "white", "#E46726")) +
+  ggtitle("Correlation Between eco_status_7 and Easting")
+```
+
+A correlation analysis between BD7 and Easting and Northing shows there is a negative correlation between BD7 and Northing (-0.34), while effectively no correlation between BD7 and Easting at 0.02. 
+
+``` {r}
+##### the data exploration phase (only some suggested approaches)
+
+# you could split the data by period and compare these stats before and after 
+table <- data.frame()
+for(i in eco_selected){
+  table <- rbind(table,
+                 c(eco_names[i-1],
+                   round(mean(df_Proj[,i],na.rm = TRUE),digits = 2),
+                   round(sd(df_Proj[,i],na.rm = TRUE),digits = 2),
+                   round(skewness(df_Proj[,i],na.rm = TRUE),digits = 2)
+                 ))}
+colnames(table) <- c("taxi_group","mean","sd","skewness")
+table%>%arrange(sd,skewness) # something more could be done here 
+# extend data exploration; with correlations between continuous variables
+cont_vars <- df_Proj%>%select(c(eco_selected,13,14)) # includes easting and northing 
+names(cont_vars)
+cormat <- round(x = cor(cont_vars,use="pairwise.complete.obs"), digits = 2)
+# melt the correlation matrix
+melt(cormat)%>%mutate(R2 = value^2)%>%arrange(value)
+melt(cormat)%>%mutate(R2 = value^2)%>%arrange(Var1,value)
+
+corrM <- cor(cormat)
+ggcorrplot(corrM, type = "lower", outline.col = "white", lab = TRUE, lab_size = 3, colors = c("#6D9EC1", "white", "#E46726"))
+```
+
+Doing a basic correlation matrix of the continuous variables highlights strong correlations between differing species and their location via Easting or Northing. This suggests certain species become more common the further east or north you go. For example, Bryophytes have a strong negative correlation (-0.91) with Easting, suggesting they are noticeably more common in the west, becoming less common the further east traveled. Meanwhile, macromoths have a strong negative correlation (0.76) with Northing, suggesting they are most common in the southern hectads. 
+
+
+## Hypothesis Testing
+
+
+The purpose of this section is to test two hypotheses unrelated to the linear regression results which are expected in the next two section (BD7 ~ BD11, and mlr of BD4~BD7 with AIC analysis).
+
+
+``` {r}
+mlr <- lm(df_Proj$eco_status_7 ~ df$dominantLandClass)
+summary(mlr)
+#Surprisingly 12 of the land classes appear to have little effect on the bd score
+#However, the remaining land classes definitely impact on bd scores, with the overall analysis
+#showing that land classification has a strong influence on bd scores.
+```
+
+A simple regression analysis of BD7 against the dominant land class 
+
+
+##Simple Linear Regression
+
+This section will use simple linear regression to analyse how BD7 matches BD11. This will be done over the two periods Y70 and Y00, as well as a simple comparison using all data from both periods; this will be to see if there is a noticeable difference between the different periods or if it is relatively unchanging. 
+
+``` {r}
+# Simple linear regression part of the specified assignment
+# regressions of eco_status_7 against ecologicalstatus based on all 11
+plot(df_Proj$eco_status_7~df_Proj$ecologicalStatus)
+abline(0,1,col="red")
+lin_mod <- lm(df_Proj$eco_status_7~df_Proj$ecologicalStatus)
+abline(lin_mod,col="green")
+summary(lin_mod)
+#doing lr on bd7 against bd11 shows that bd11 is a strong indicator of bd7
+plot(jitter(fitted(lin_mod)),residuals(lin_mod),xlab="Fitted",ylab="Residuals")
+abline(h=0,col="blue")
+#studdying the residuals we can see that they are very close to 0 (within 0.15) suggesting this is an effective model
+qqnorm(residuals(lin_mod))
+qqline(residuals(lin_mod),col="red")
+``` 
+
+The results of the a simple linear regression analysis of BD7 against BD11 show that BD11 is a strong indicator of BD7 with an incredibly small p-value. Additionally, with an adjusted R-squared value of 0.86 BD11 can be used to explain much of the variation found with BD7.
+Further study of the residuals shows they are very close to 0, with all residuals being within 0.15 of 0. These results suggest this is an effective model for estimating BD7. 
+Looking at the Q Q plot it appears there is a distribution close to normal, but with a slight left tail. (?)
+
+```{r}
+# do the same for each period report and differences 
+df_Proj_Y70 <- df_Proj%>%filter(period=="Y70")
+lin_mod <- lm(df_Proj_Y70$eco_status_7~df_Proj_Y70$ecologicalStatus)
+lin_mod$coefficients
+summary(lin_mod)
+# for later period 
+df_Proj_Y00 <- df_Proj%>%filter(period=="Y00")
+lin_mod <- lm(df_Proj_Y00$eco_status_7~df_Proj_Y00$ecologicalStatus)
+lin_mod$coefficients
+summary(lin_mod)
+#In Y70 bd11 served as a better indicator of bd7 than in Y00. This suggests that there has been a greater
+#level of divergence between the two, as bd11 explains less of the variance in bd7 30 years later.  
+
+```
+
+Further deconstructing BD7 and BD11 into the two different time periods and runnning another simple linear regression model on BD7 against BD11 offers little change in the p-values, confirming what would have been suspected from the previous regression analysis - that BD11 is a good predictor for BD7. However, the difference comes when looking at the multiple R- squared value. In Y70 BD11 served as a better indicator of BD7 than in Y00, with BD11 explaining 0.89% of the variance in Y70, but only 0.85% in Y00. This suggests that there has been a greater level of divergence between the two, as BD11 explains less of the variance in BD7 roughly 30 years later. Of course while there has been some change over the two periods, it is clear BD11 is still a very effective predictor of BD7, and this is clearly an effective model, since the change is not drastic. 
+
+``` {r}
+# linear regression of BD4 on BD7 
+mean_selected <- rowMeans(df[,eco_not_selected ],na.rm=TRUE) # mean the rem 4 columns 
+# add in the biodiversity measure which is the mean over 7 taxonomic groups
+df_Proj <- df_Proj%>%mutate(eco_status_4=mean_selected)
+names(df_Proj)
+
+# regressions of means: eco_status_4 against others not inc eco_status_4 data
+plot(df_Proj$eco_status_4~df_Proj$eco_status_7)
+abline(0,1,col="red")
+lin_mod <- lm(df_Proj$eco_status_4~df_Proj$eco_status_7)
+summary(lin_mod)
+abline(lin_mod,col="green")
+#bd7 is an effective predictor variable for bd4, but it does not explain the majority of the variance for bd4
+plot(jitter(fitted(lin_mod)),residuals(lin_mod),xlab="Fitted",ylab="Residuals")
+abline(h=0,col="blue")
+#good model, low variance in residuals (less than |3| at |0.4| being the most)
+qqnorm(residuals(lin_mod))
+qqline(residuals(lin_mod),col="red")
+```
+
+Doing basic linear regression of BD4 against BD7 shows that BD7 is an effective predictor for BD4 with a very small p-value, however BD7 is not as good a predictor of BD4 as BD11 is for BD7 with a much higher - though still statistically significant - p-value of 0.02 for the intercept. Additionally, while BD7 is a good predictor for BD4, it does not explain the majority of the variance in BD4; the multiple R-squared value for this model is 0.41. 
+Looking at the residuals we can see a low level of variance - the residual with the highest variance only has an absolute value of 0.4, far below the widely accepted limit of 3 to identify outliers. 
+
+
+## Multiple Linear Regression
+
+•	Calculate the BD4, mean of left over 4 proportional species richness values. 
+•	Perform a multiple linear regression of BD4 against all seven of your proportional species values (you have seven predictors and BD4 as the response variable.)
+•	Perform any feature selection based on p values from the regression and also use AIC to justify the removal or otherwise of variables as predictors
+•	Write a report on your final model including an in interpretation of the regression coefficients
+
+
+``` {r}
+# now multiple linear regression BD4 against the selected 7 
+
+# Create Training and Test data 
+trainingRowIndex <- sample(1:nrow(df_Proj), 0.8*nrow(df_Proj))  # row indices for 80% training data
+trainingData <- df_Proj[trainingRowIndex, ]  # model training data
+testData  <- df_Proj[-trainingRowIndex, ]%>%na.omit # for test data remove NAs 
+
+# Build the model on training data
+lmMod_train <- lm(eco_status_4~.,
+                  data=trainingData[c(eco_selected_names,"eco_status_4")],
+                  na.action=na.omit,y=TRUE)
+summary (lmMod_train)  # model summary
+cor(lmMod_train$fitted.values,lmMod_train$y) # cor training data 
+Eco_4_Pred <- predict(lmMod_train, testData) # predict to check model on test Data
+cor(Eco_4_Pred,testData$eco_status_4) #uses the test data as the predictor for the predicted values for bd4
+plot(Eco_4_Pred~testData$eco_status_4) 
+abline(0,1,col="red")
+summary(lm(Eco_4_Pred~testData$eco_status_4)) #can use bd7 to predict bd4, and it be closely matched to the actual bd4
+# mis_fit_to_testData are the residuals for the train model fit to the test data 
+mis_fit_to_testData <- testData$eco_status_4-Eco_4_Pred
+plot(mis_fit_to_testData~Eco_4_Pred) # look for unwanted pattern in residuals
+abline(0,0,col="red")
+qqnorm(mis_fit_to_testData) # check for normality of residuals in prediction
+qqline(mis_fit_to_testData,col="red")
+#creates a model to predict the missing bd4 data from the bd7 data
+```
+
+
+``` {r}
+
+```
+
+
+
+``` {r}
+
+```
+
+
+``` {r}
+
+```
